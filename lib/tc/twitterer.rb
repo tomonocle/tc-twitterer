@@ -1,5 +1,3 @@
-
-
 MAX_LENGTH = 140
 URL_LENGTH = 23
 MAX_STRING_LENGTH = MAX_LENGTH - URL_LENGTH
@@ -132,8 +130,62 @@ module TC
       response.body
     end
 
-    def run
+    def pick_line( path, contents )
+      n    = 0
+      pick = ''
+      rows = contents.split( "\n" )
 
+      @log.info "Picking suitable line from #{path}"
+
+      while ( pick == '' ) do 
+        line_number = rand( rows.count )
+        line        = rows[ line_number ]
+
+        # must contain an alpha
+        next if not line.match( /[a-zA-Z]/ )
+
+        # mustn't've been used before
+        # TODO
+
+        # if we're here, we're good to go
+        pick = line
+        n    = line_number + 1
+      end
+
+      @log.debug "Picked #{n}: '#{pick}'"
+
+      return  pick, n 
+    end
+
+    def sanitise( line )
+      rc = Redcarpet::Markdown.new( Redcarpet::Render::StripDown )
+
+      # remove any markdown
+      line = rc.render( line ).strip!
+
+      # compress any whitespace
+      line.gsub!( /\s+/, ' ' )
+
+      # truncate to a sane length, add an elipsis if necessary
+      line = ( line.length > MAX_STRING_LENGTH ? "#{line[0..MAX_STRING_LENGTH]}..." : line )
+
+      # just in case we truncated after a space
+      line.gsub( /\s.../, '...' ) 
+
+      line
+    end
+
+    def tweet( username, repo, hash, path, line, line_number )
+      link = "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{line_number}"
+
+      tweet = "#{sanitise(line)} #{link}"
+
+      @log.info "Tweeting '#{tweet}' [#{tweet.length}]"
+
+      @twitter.update( tweet )
+    end
+
+    def run
       file = "tomonocle/trello-list2card/README.md"
       username, repo, path = file.match(/(.*?)\/(.*?)\/(.*)/).captures
 
@@ -143,64 +195,16 @@ module TC
       hash = resolve_repo( username, repo )
 
       # fetch file
-      file = fetch_file( username, repo, hash, path )
+      file_body = fetch_file( username, repo, hash, path )
 
       # extract suitable line
-      #line, line_number = pick_line( file))
-      # tweet
-      # store in db
-      
-      n = 0
-      pick = ''
-      rows = response.body.split( "\n" )
+      line, line_number = pick_line( path, file_body )
 
-      while ( pick == '' ) do 
-        line_number = rand( rows.count )
-        line = rows[ line_number ]
+      # tweet it
+      tweet( username, repo, hash, path, line, line_number )
 
-        next if not line.match( /[a-zA-Z]+/ )
-        # next if we've tweeted this before
-
-        pick = line
-        n = line_number + 1
-      end
-
-      #pick = "- The *difficulty* lies, not in the new ideas, but in escaping from the old ones, which ramify, for those brought up as most of us have been, into every corner of our minds.\n"
-      # n = 124
-      # username = 'tomonocle'
-      # repo = 'miscellany'
-      # hash = '77c77220c8c7638d3c71e60175d44d6073cb2e70'
-      # path = 'management.md'
-
-md = Redcarpet::Markdown.new( Redcarpet::Render::StripDown )
-
-pick = md.render( pick ).strip!
-
-string = ( pick.length > MAX_STRING_LENGTH ? "#{pick[0..MAX_STRING_LENGTH]}..." : pick )
-
-       link = "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{n}"
-
-       tweet = "#{string} #{link}"
-       puts "#{tweet.length} #{tweet}"
-
-      # twitter = Twitter::REST::Client.new do |config|
-      #   config.consumer_key = ''
-      #   config.consumer_secret = ''
-      #   config.access_token = ''
-      #   config.access_token_secret = ''
-      # end
-
-      puts twitter.update( tweet )
-
-
-      # tweets = twitter.user_timeline( 'tomonocle', count: 20 )
-      # tweets.each do |t|
-      #   puts t.full_text
-      # end
+      # TODO store in db
+      exit
     end
   end
-
-
-
 end
-
