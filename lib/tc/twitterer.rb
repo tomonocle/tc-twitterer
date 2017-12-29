@@ -1,6 +1,7 @@
-MAX_LENGTH = 140
-URL_LENGTH = 23
-MAX_STRING_LENGTH = MAX_LENGTH - URL_LENGTH
+MAX_TWEET_LENGTH = 140
+MAX_URL_LENGTH   = 23
+
+MAX_STRING_LENGTH = MAX_TWEET_LENGTH - MAX_URL_LENGTH
 
 module TC
   class Twitterer
@@ -13,6 +14,7 @@ module TC
     require 'redcarpet/render_strip'
     require 'logger'
     require 'ostruct'
+    require 'csv'
 
     @@LOG_LEVEL_MAP = {
       'debug' => Logger::DEBUG,
@@ -48,9 +50,9 @@ module TC
       self.set_log_level( log_level )
 
       # very basic sanity check of the config
-      [ 'twitter_consumer_key', 'twitter_consumer_secret', 'twitter_access_token', 'twitter_access_token_secret' ].each do |key|
+      [ 'twitter_consumer_key', 'twitter_consumer_secret', 'twitter_access_token', 'twitter_access_token_secret', 'source' ].each do |key|
         if ( not @config[ key ] )
-          @log.fatal "Key #{ key } not present in config"
+          @log.fatal "Required key '#{ key } not present in config"
           exit 1
         end
       end
@@ -71,7 +73,7 @@ module TC
       end
 
       if ( dry_run )
-        @log.warn 'Dry run mode: ON'
+        @log.warn 'Dry run mode: ACTIVATED'
         @dry_run = true
       end
     end
@@ -90,7 +92,7 @@ module TC
     end
 
     def resolve_repo( username, repo )
-      @log.info "Resolving #{username}/#{repo} from master->hash"
+      @log.info "Resolving master->hash for '#{username}/#{repo}'"
 
       begin
         response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{username}/#{repo}/git/refs/heads/master" ) )
@@ -101,18 +103,19 @@ module TC
         json = JSON.parse( response.body )
 
       rescue => e
-        @log.error "Failed to resolve #{username}/#{repo} master: #{e}"
+        @log.error "Failed to resolve '#{username}/#{repo}' master: #{e}"
+        raise e
       end
 
-      hash = json["object"]["sha"]
+      hash = json['object']['sha']
 
-      @log.debug "Resolved #{username}/#{repo} master->#{hash}"
+      @log.debug "Resolved master->#{hash} for '#{username}/#{repo}'"
 
       hash
     end
 
     def fetch_file( username, repo, hash, path )
-      @log.info "Fetching #{username}/#{repo}/#{path} at #{hash}"
+      @log.info "Fetching '#{username}/#{repo}/#{path}' at '#{hash}'"
 
       begin
         response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{username}/#{repo}/#{hash}/#{path}") )
@@ -121,10 +124,11 @@ module TC
         response.value
 
       rescue => e
-        @log.error "Failed to fetch #{username}/#{repo}/#{path} at #{hash}: #{e}"
+        @log.error "Failed to fetch '#{username}/#{repo}/#{path}' at '#{hash}': #{e}"
+        raise e
       end
 
-      @log.debug "Fetched #{username}/#{repo}/#{path} at #{hash}"
+      @log.debug "Fetched '#{username}/#{repo}/#{path}' at '#{hash}'"
       @log.debug response.body
 
       response.body
@@ -135,8 +139,9 @@ module TC
       pick = ''
       rows = contents.split( "\n" )
 
-      @log.info "Picking suitable line from #{path}"
+      @log.info "Picking suitable line from '#{path}'"
 
+     # FIXME Risk of infinite loop. Perhaps give it 1000 chances to find a match before aborting? 
       while ( pick == '' ) do 
         line_number = rand( rows.count )
         line        = rows[ line_number ]
@@ -154,7 +159,7 @@ module TC
 
       @log.debug "Picked #{n}: '#{pick}'"
 
-      return  pick, n 
+      return pick, n 
     end
 
     def sanitise( line )
@@ -170,7 +175,7 @@ module TC
       line = ( line.length > MAX_STRING_LENGTH ? "#{line[0..MAX_STRING_LENGTH]}..." : line )
 
       # just in case we truncated after a space
-      line.gsub( /\s.../, '...' ) 
+      line.gsub!( /\s\.\.\./, '...' ) 
 
       line
     end
@@ -178,33 +183,39 @@ module TC
     def tweet( username, repo, hash, path, line, line_number )
       link = "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{line_number}"
 
-      tweet = "#{sanitise(line)} #{link}"
+      tweet = sprintf "%s %s", sanitise( line ), link
 
-      @log.info "Tweeting '#{tweet}' [#{tweet.length}]"
-
-      @twitter.update( tweet )
+      @log.info sprintf "%sTweeting '%s' [%d]", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length
+      @twitter.update( tweet ) if not @dry_run
     end
 
     def run
-      file = "tomonocle/trello-list2card/README.md"
-      username, repo, path = file.match(/(.*?)\/(.*?)\/(.*)/).captures
+      @config.source.each do |source|
+        @log.info "Processing '#{source}'"
 
-      # TODO fail here if we can't extract successfully
+        begin
+          username, repo, path = source.match(/(.*?)\/(.*?)\/(.*)/).captures
+          # TODO fail here if we can't extract successfully
 
-      # convert master->hash
-      hash = resolve_repo( username, repo )
+          # convert master->hash
+          hash = resolve_repo( username, repo )
 
-      # fetch file
-      file_body = fetch_file( username, repo, hash, path )
+          # fetch file
+          file_body = fetch_file( username, repo, hash, path )
 
-      # extract suitable line
-      line, line_number = pick_line( path, file_body )
+          # extract suitable line
+          line, line_number = pick_line( path, file_body )
 
-      # tweet it
-      tweet( username, repo, hash, path, line, line_number )
+          # generate the tweet and send it
+          tweet( username, repo, hash, path, line, line_number )
 
-      # TODO store in db
-      exit
+          # TODO store in db: NOTE must store raw line, not sanitised version
+
+
+        rescue => e
+          @log.error "Failed '#{source}': #{e}"
+        end
+      end
     end
   end
 end
