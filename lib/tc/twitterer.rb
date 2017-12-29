@@ -1,6 +1,13 @@
-require "tc/twitterer/version"
-require "net/http"
-require "json"
+require 'tc/twitterer/version'
+require 'net/http'
+require 'json'
+require 'twitter'
+require 'redcarpet'
+require 'redcarpet/render_strip'
+
+MAX_LENGTH = 140
+URL_LENGTH = 23
+MAX_STRING_LENGTH = MAX_LENGTH - URL_LENGTH
 
 module TC
   class Twitterer
@@ -40,8 +47,38 @@ module TC
         n = line_number + 1
       end
 
-      puts "#{n}: #{pick}"
-      puts "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{n}"
+      #pick = "- The *difficulty* lies, not in the new ideas, but in escaping from the old ones, which ramify, for those brought up as most of us have been, into every corner of our minds.\n"
+      # n = 124
+      # username = 'tomonocle'
+      # repo = 'miscellany'
+      # hash = '77c77220c8c7638d3c71e60175d44d6073cb2e70'
+      # path = 'management.md'
+
+md = Redcarpet::Markdown.new( Redcarpet::Render::StripDown )
+
+pick = md.render( pick ).strip!
+
+string = ( pick.length > MAX_STRING_LENGTH ? "#{pick[0..MAX_STRING_LENGTH]}..." : pick )
+
+       link = "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{n}"
+
+       tweet = "#{string} #{link}"
+       puts "#{tweet.length} #{tweet}"
+
+      twitter = Twitter::REST::Client.new do |config|
+        config.consumer_key = 'x'
+        config.consumer_secret = 'y'
+        config.access_token = 'z'
+        config.access_token_secret = '0'
+      end
+
+      puts twitter.update( tweet )
+
+
+      # tweets = twitter.user_timeline( 'tomonocle', count: 20 )
+      # tweets.each do |t|
+      #   puts t.full_text
+      # end
     end
   end
 end
