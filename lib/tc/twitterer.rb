@@ -57,18 +57,20 @@ module TC
         end
       end
 
-      twitter = Twitter::REST::Client.new do |config|
-        config.consumer_key        = @config.twitter_consumer_key
-        config.consumer_secret     = @config.twitter_consumer_secret
-        config.access_token        = @config.twitter_access_token
-        config.access_token_secret = @config.twitter_access_token_secret
+      begin
+        @twitter = Twitter::REST::Client.new do |config|
+          config.consumer_key        = @config.twitter_consumer_key
+          config.consumer_secret     = @config.twitter_consumer_secret
+          config.access_token        = @config.twitter_access_token
+          config.access_token_secret = @config.twitter_access_token_secret
+        end
+
+        @log.info "Connected to twitter as '#{@twitter.user.screen_name}'"
+
+      rescue => e
+        @log.fatal "Failed to connect to twitter: #{e.message}"
+        exit 1
       end
-
-      twitter.update( "Testing")
-
-      puts twitter
-
-      exit
 
       if ( dry_run )
         @log.warn 'Dry run mode: ON'
@@ -89,27 +91,64 @@ module TC
       @log.level = @@LOG_LEVEL_MAP[ level ]
     end
 
+    def resolve_repo( username, repo )
+      @log.info "Resolving #{username}/#{repo} from master->hash"
+
+      begin
+        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{username}/#{repo}/git/refs/heads/master" ) )
+
+        # this will fail unless we get a 200 OK
+        response.value
+
+        json = JSON.parse( response.body )
+
+      rescue => e
+        @log.error "Failed to resolve #{username}/#{repo} master: #{e}"
+      end
+
+      hash = json["object"]["sha"]
+
+      @log.debug "Resolved #{username}/#{repo} master->#{hash}"
+
+      hash
+    end
+
+    def fetch_file( username, repo, hash, path )
+      @log.info "Fetching #{username}/#{repo}/#{path} at #{hash}"
+
+      begin
+        response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{username}/#{repo}/#{hash}/#{path}") )
+
+        # this will fail unless we get a 200 OK
+        response.value
+
+      rescue => e
+        @log.error "Failed to fetch #{username}/#{repo}/#{path} at #{hash}: #{e}"
+      end
+
+      @log.debug "Fetched #{username}/#{repo}/#{path} at #{hash}"
+      @log.debug response.body
+
+      response.body
+    end
+
     def run
 
       file = "tomonocle/trello-list2card/README.md"
-
-      # need to convert to a commit
       username, repo, path = file.match(/(.*?)\/(.*?)\/(.*)/).captures
-      puts username
-      puts repo
-      puts path
 
-      # resolve master->commit hash
-      uri = URI( "https://api.github.com/repos/#{username}/#{repo}/git/refs/heads/master" )
-      response = Net::HTTP.get_response( uri )
-      parsed = JSON.parse( response.body )
-      hash = parsed["object"]["sha"]
+      # TODO fail here if we can't extract successfully
 
+      # convert master->hash
+      hash = resolve_repo( username, repo )
 
-      uri = URI( "https://raw.githubusercontent.com/#{username}/#{repo}/#{hash}/#{path}")
-      puts uri
-      response = Net::HTTP.get_response( uri )
-      puts response.code  
+      # fetch file
+      file = fetch_file( username, repo, hash, path )
+
+      # extract suitable line
+      #line, line_number = pick_line( file))
+      # tweet
+      # store in db
       
       n = 0
       pick = ''
@@ -160,5 +199,8 @@ string = ( pick.length > MAX_STRING_LENGTH ? "#{pick[0..MAX_STRING_LENGTH]}..." 
       # end
     end
   end
+
+
+
 end
 
