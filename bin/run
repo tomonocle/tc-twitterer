@@ -10,5 +10,6 @@ require "tc/twitterer"
 # require "pry"
 # Pry.start
 
-x = TC::Twitterer.new()
+x = TC::Twitterer.new( '/Users/tomc/src/tc-twitterer/etc/config.toml', 'debug', '1' )
+x.run
 

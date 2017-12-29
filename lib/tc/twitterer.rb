@@ -1,9 +1,4 @@
-require 'tc/twitterer/version'
-require 'net/http'
-require 'json'
-require 'twitter'
-require 'redcarpet'
-require 'redcarpet/render_strip'
+
 
 MAX_LENGTH = 140
 URL_LENGTH = 23
@@ -11,7 +6,91 @@ MAX_STRING_LENGTH = MAX_LENGTH - URL_LENGTH
 
 module TC
   class Twitterer
-    def initialize
+    require 'toml'
+    require 'tc/twitterer/version'
+    require 'net/http'
+    require 'json'
+    require 'twitter'
+    require 'redcarpet'
+    require 'redcarpet/render_strip'
+    require 'logger'
+    require 'ostruct'
+
+    @@LOG_LEVEL_MAP = {
+      'debug' => Logger::DEBUG,
+      'info'  => Logger::INFO,
+      'warn'  => Logger::WARN,
+      'error' => Logger::ERROR,
+      'fatal' => Logger::FATAL,
+    }
+
+    @@DEFAULT_LOG_LEVEL = 'warn'
+
+    def initialize( config_path, log_level, dry_run )
+      @log = Logger.new( STDERR )
+      self.set_log_level( @@DEFAULT_LOG_LEVEL )
+
+      @log.info 'Starting up'
+
+      begin
+        raise 'config file not specified' if not config_path
+        raise 'config file not found'     if not File.file?( config_path )
+
+        @log.info "Loading config from #{ config_path }"
+        @config = OpenStruct.new( TOML.load_file( config_path ) )
+        @log.info 'Loaded config'
+        @log.debug @config.to_s
+
+      rescue => e
+        @log.fatal "Failed to load config: #{e.message}"
+        exit 1
+      end
+
+      self.set_log_level( @config[ 'log_level' ] )
+      self.set_log_level( log_level )
+
+      # very basic sanity check of the config
+      [ 'twitter_consumer_key', 'twitter_consumer_secret', 'twitter_access_token', 'twitter_access_token_secret' ].each do |key|
+        if ( not @config[ key ] )
+          @log.fatal "Key #{ key } not present in config"
+          exit 1
+        end
+      end
+
+      twitter = Twitter::REST::Client.new do |config|
+        config.consumer_key        = @config.twitter_consumer_key
+        config.consumer_secret     = @config.twitter_consumer_secret
+        config.access_token        = @config.twitter_access_token
+        config.access_token_secret = @config.twitter_access_token_secret
+      end
+
+      twitter.update( "Testing")
+
+      puts twitter
+
+      exit
+
+      if ( dry_run )
+        @log.warn 'Dry run mode: ON'
+        @dry_run = true
+      end
+    end
+
+    def set_log_level( level )
+      return if not level
+
+      level.downcase!
+
+      if ( not @@LOG_LEVEL_MAP[ level ] )
+        @log.fatal "Unrecognised log_level '#{ level }'"
+        exit 1
+      end
+
+      @log.level = @@LOG_LEVEL_MAP[ level ]
+    end
+
+    def run
+
       file = "tomonocle/trello-list2card/README.md"
 
       # need to convert to a commit
@@ -65,12 +144,12 @@ string = ( pick.length > MAX_STRING_LENGTH ? "#{pick[0..MAX_STRING_LENGTH]}..." 
        tweet = "#{string} #{link}"
        puts "#{tweet.length} #{tweet}"
 
-      twitter = Twitter::REST::Client.new do |config|
-        config.consumer_key = 'x'
-        config.consumer_secret = 'y'
-        config.access_token = 'z'
-        config.access_token_secret = '0'
-      end
+      # twitter = Twitter::REST::Client.new do |config|
+      #   config.consumer_key = ''
+      #   config.consumer_secret = ''
+      #   config.access_token = ''
+      #   config.access_token_secret = ''
+      # end
 
       puts twitter.update( tweet )
 
@@ -82,3 +161,4 @@ string = ( pick.length > MAX_STRING_LENGTH ? "#{pick[0..MAX_STRING_LENGTH]}..." 
     end
   end
 end
+
