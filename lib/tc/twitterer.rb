@@ -174,11 +174,8 @@ module TC
         line_number = rand( rows.count )
         line        = rows[ line_number ]
 
-        # must contain an alpha
-        if not line.match( /[a-zA-Z]/ ) then
-          @log.debug "Skipping '#{line}' because it doesn't contain an alpha character"
-          next
-        end
+        # must contain an alpha - don't bother logging as this is specified behavior
+        next if not line.match( /[a-zA-Z]/ )
 
         # mustn't've been used before
         md5 = Digest::MD5.hexdigest line
@@ -232,8 +229,8 @@ module TC
     end
 
     def update_history( source, line )
-      if @dry_run then
-
+      @log.info sprintf "%sAdding '%s' to history for '%s'", ( @dry_run == true ? '[DRYRUN] ' : '' ), line, source
+      return if @dry_run
 
       CSV.open( @config.history_file, 'a' ) do |csv|
         csv << [ Time.now.strftime( '%FT%T%z' ), source, line ]
