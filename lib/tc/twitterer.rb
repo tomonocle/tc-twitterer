@@ -16,7 +16,7 @@ module TC
     MAX_STRING_LENGTH  = MAX_TWEET_LENGTH - MAX_URL_LENGTH
     MAX_HISTORY_LENGTH = MAX_STRING_LENGTH
 
-    @@LOG_LEVEL_MAP = {
+    LOG_LEVEL_MAP = {
       'debug' => Logger::DEBUG,
       'info'  => Logger::INFO,
       'warn'  => Logger::WARN,
@@ -24,11 +24,11 @@ module TC
       'fatal' => Logger::FATAL,
     }
 
-    @@DEFAULT_LOG_LEVEL = 'warn'
+    DEFAULT_LOG_LEVEL = 'warn'
 
     def initialize( config_path, log_level, dry_run )
       @log = Logger.new( STDERR )
-      self.set_log_level( @@DEFAULT_LOG_LEVEL )
+      self.set_log_level( DEFAULT_LOG_LEVEL )
 
       @log.info 'Starting up'
 
@@ -109,12 +109,12 @@ module TC
 
       level.downcase!
 
-      if ( not @@LOG_LEVEL_MAP[ level ] )
+      if ( not LOG_LEVEL_MAP[ level ] )
         @log.fatal "Unrecognised log_level '#{ level }'"
         exit 1
       end
 
-      @log.level = @@LOG_LEVEL_MAP[ level ]
+      @log.level = LOG_LEVEL_MAP[ level ]
     end
 
     def resolve_repo( repo )
