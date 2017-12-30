@@ -1,8 +1,3 @@
-MAX_TWEET_LENGTH = 140
-MAX_URL_LENGTH   = 23
-
-MAX_STRING_LENGTH = MAX_TWEET_LENGTH - MAX_URL_LENGTH
-
 module TC
   class Twitterer
     require 'toml'
@@ -15,6 +10,11 @@ module TC
     require 'logger'
     require 'ostruct'
     require 'csv'
+    require 'digest'
+
+    MAX_TWEET_LENGTH  = 140
+    MAX_URL_LENGTH    = 23
+    MAX_STRING_LENGTH = MAX_TWEET_LENGTH - MAX_URL_LENGTH
 
     @@LOG_LEVEL_MAP = {
       'debug' => Logger::DEBUG,
@@ -39,7 +39,6 @@ module TC
         @log.info "Loading config from #{ config_path }"
         @config = OpenStruct.new( TOML.load_file( config_path ) )
         @log.info 'Loaded config'
-        @log.debug @config.to_s
 
       rescue => e
         @log.fatal "Failed to load config: #{e.message}"
@@ -70,6 +69,35 @@ module TC
       rescue => e
         @log.fatal "Failed to connect to twitter: #{e.message}"
         exit 1
+      end
+
+      # open and import the history if configured
+      if ( @config.history_file )
+        @log.info( "Loading history from '#{ @config.history_file }'" )
+        @history = {}
+
+        begin
+          if not File.file?( @config.history_file ) then
+            @log.info "History not present - creating"
+            File.write( @config.history_file, nil )
+          end
+
+          log = CSV.foreach( @config.history_file ) do |csv|
+            timestamp,source,line = csv
+
+            md5 = Digest::MD5.hexdigest line
+
+            @log.debug( "Processing history: #{source}/#{line}/#{timestamp}")
+
+            # apparently ruby doesn't autovivify? Vive la perl!
+            @history[source]    ||= {}
+            @history[source][md5] = timestamp
+          end
+
+        rescue => e
+          @log.fatal( "Failed to import history from '#{ @config.history_file }': #{ e }" )
+          exit 1
+        end
       end
 
       if ( dry_run )
@@ -129,35 +157,49 @@ module TC
       end
 
       @log.debug "Fetched '#{username}/#{repo}/#{path}' at '#{hash}'"
-      @log.debug response.body
 
       response.body
     end
 
-    def pick_line( path, contents )
+    def pick_line( username, repo, path, contents )
       n    = 0
       pick = ''
       rows = contents.split( "\n" )
 
-      @log.info "Picking suitable line from '#{path}'"
+      source = "#{username}/#{repo}/#{path}"
 
-     # FIXME Risk of infinite loop. Perhaps give it 1000 chances to find a match before aborting? 
-      while ( pick == '' ) do 
+      @log.info "Picking suitable line from '#{source}'"
+
+      for i in 1..rows.count
         line_number = rand( rows.count )
         line        = rows[ line_number ]
 
         # must contain an alpha
-        next if not line.match( /[a-zA-Z]/ )
+        if not line.match( /[a-zA-Z]/ ) then
+          @log.debug "Skipping '#{line}' because it doesn't contain an alpha character"
+          next
+        end
 
         # mustn't've been used before
-        # TODO
+        md5 = Digest::MD5.hexdigest line
+
+        if @history.key?( source ) and @history[ source ].key?( md5 ) then
+          @log.debug "Skipping '#{line}' because we've used it before (#{ @history[ source ][ md5 ] })"
+          next
+        end
 
         # if we're here, we're good to go
         pick = line
         n    = line_number + 1
+
+        break
       end
 
-      @log.debug "Picked #{n}: '#{pick}'"
+      if ( n == 0 ) then
+        raise "Failed to pick an entry from '#{source}' - exhausted content?"
+      end
+
+      @log.debug "Picked '#{pick}' [#{n}] from '#{source}'"
 
       return pick, n 
     end
@@ -189,6 +231,15 @@ module TC
       @twitter.update( tweet ) if not @dry_run
     end
 
+    def update_history( source, line )
+      if @dry_run then
+
+
+      CSV.open( @config.history_file, 'a' ) do |csv|
+        csv << [ Time.now.strftime( '%FT%T%z' ), source, line ]
+      end
+    end
+
     def run
       @config.source.each do |source|
         @log.info "Processing '#{source}'"
@@ -204,14 +255,15 @@ module TC
           file_body = fetch_file( username, repo, hash, path )
 
           # extract suitable line
-          line, line_number = pick_line( path, file_body )
+          line, line_number = pick_line( username, repo, path, file_body )
 
           # generate the tweet and send it
           tweet( username, repo, hash, path, line, line_number )
 
-          # TODO store in db: NOTE must store raw line, not sanitised version
+          # store in history
+          update_history( source, line )
 
-
+          # all done!
         rescue => e
           @log.error "Failed '#{source}': #{e}"
         end
