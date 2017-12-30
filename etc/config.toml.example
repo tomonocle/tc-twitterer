@@ -1,0 +1,30 @@
+# log_level [OPT]
+# The log level to operate at: debug/info/warn/error/fatal
+# log_level = "warn"
+
+# twitter_consumer_key [REQ]
+# Twitter API key for your application (see README.md)
+twitter_consumer_key = ""
+
+# twitter_consumer_secret [REQ]
+# Twitter API secret for your application (see README.md)
+twitter_consumer_secret = ""
+
+# twitter_access_token [REQ]
+# Twitter API key for your user (see README.md)
+twitter_access_token = ""
+
+# twitter_access_token_secret [REQ]
+# Twitter API secret for your user (see README.md)
+twitter_access_token_secret = ""
+
+# history_file [OPT]
+# path to store previous tweets to avoid being repetitive
+# history_file = "./var/twitterer.history"
+
+# source [REQ]
+# array of GitHub-hosted source files to generate tweets from
+# must be on the default branch
+# e.g
+# source = [ "tomonocle/tc-twitterer/README.md", "tomonocle/trello-list2card/README.md" ]
+source = []
