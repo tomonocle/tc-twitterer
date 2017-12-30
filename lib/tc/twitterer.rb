@@ -118,10 +118,20 @@ module TC
     end
 
     def resolve_repo( repo )
-      @log.info "Resolving master->hash for '#{repo}'"
+      @log.info "Resolving default->hash for '#{repo}'"
 
       begin
-        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{repo}/git/refs/heads/master" ) )
+        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{repo}" ) )
+
+        # fail if not 200 OK
+        response.value
+
+        json = JSON.parse( response.body )
+
+        default_branch = json[ 'default_branch' ]
+        @log.info "Found default branch '#{default_branch}'"
+
+        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{repo}/git/refs/heads/#{ default_branch }" ) )
 
         # this will fail unless we get a 200 OK
         response.value
@@ -129,13 +139,13 @@ module TC
         json = JSON.parse( response.body )
 
       rescue => e
-        @log.error "Failed to resolve '#{repo}' master: #{e}"
+        @log.error "Failed to resolve '#{repo}' default '#{default_branch}': #{e}"
         raise e
       end
 
       hash = json['object']['sha']
 
-      @log.debug "Resolved master->#{hash} for '#{repo}'"
+      @log.debug "Resolved #{default_branch}->#{hash} for '#{repo}'"
 
       hash
     end
@@ -251,7 +261,7 @@ module TC
             next
           end
 
-          # convert master->hash
+          # convert default->hash
           hash = resolve_repo( repo )
 
           # fetch file
