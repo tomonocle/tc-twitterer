@@ -26,7 +26,7 @@ or you can follow the guide below.
 ### Twitter Consumer API key and secret
 First you need to register a new application with Twitter.
 
-Visit [https://apps.twitter.com/](https://apps.twitter.com/) and follow the steps.
+Visit [https://apps.twitter.com/app/new](https://apps.twitter.com/app/new) and follow the steps.
 
 Once you've created the app, hit _Keys and Access Tokens_ to get your... Keys
 and access tokens.
