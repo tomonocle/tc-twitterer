@@ -1,5 +1,5 @@
 module TC
-  module Twitterer
+  class Twitterer
     VERSION = "0.1.0"
   end
 end
