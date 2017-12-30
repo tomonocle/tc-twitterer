@@ -33,8 +33,8 @@ module TC
       @log.info 'Starting up'
 
       begin
-        raise 'config file not specified' if not config_path
-        raise 'config file not found'     if not File.file?( config_path )
+        raise 'config file not specified' unless config_path
+        raise 'config file not found'     unless File.file?( config_path )
 
         @log.info "Loading config from #{ config_path }"
         @config = OpenStruct.new( TOML.load_file( config_path ) )
@@ -50,7 +50,7 @@ module TC
 
       # very basic sanity check of the config
       [ 'twitter_consumer_key', 'twitter_consumer_secret', 'twitter_access_token', 'twitter_access_token_secret', 'source' ].each do |key|
-        if ( not @config[ key ] )
+        unless @config[ key ]
           @log.fatal "Required key '#{ key } not present in config"
           exit 1
         end
@@ -72,18 +72,18 @@ module TC
       end
 
       # open and import the history if configured
-      if ( @config.history_file )
+      if @config.history_file
         @log.info( "Loading history from '#{ @config.history_file }'" )
         @history = {}
 
         begin
-          if not File.file?( @config.history_file ) then
+          unless File.file?( @config.history_file )
             @log.info "History not present - creating"
             File.write( @config.history_file, nil )
           end
 
-          log = CSV.foreach( @config.history_file ) do |csv|
-            timestamp,source,line = csv
+          CSV.foreach( @config.history_file ) do |csv|
+            timestamp, source, line = csv
 
             @log.debug( "Processing history: #{source}/#{line}/#{timestamp}")
 
@@ -98,18 +98,18 @@ module TC
         end
       end
 
-      if ( dry_run )
+      if dry_run
         @log.warn 'Dry run mode: ACTIVATED'
         @dry_run = true
       end
     end
 
     def set_log_level( level )
-      return if not level
+      return unless level
 
       level.downcase!
 
-      if ( not LOG_LEVEL_MAP[ level ] )
+      unless LOG_LEVEL_MAP[ level ]
         @log.fatal "Unrecognised log_level '#{ level }'"
         exit 1
       end
@@ -173,13 +173,15 @@ module TC
         line        = rows[ line_number ]
 
         # must contain an alpha - don't bother logging as this is specified behavior
-        next if not line.match( /[a-zA-Z]/ )
+        next unless line.match( /[a-zA-Z]/ )
 
         # mustn't've been used before
-        key = line[ 0 .. MAX_HISTORY_LENGTH ]
-        if @history.key?( source ) and @history[ source ].key?( key ) then
-          @log.debug "Skipping '#{line}' because we've used it before (#{ @history[ source ][ key ] })"
-          next
+        if @config.history_file
+          key = line[ 0 .. MAX_HISTORY_LENGTH ]
+          if @history.key?( source ) and @history[ source ].key?( key )
+            @log.debug "Skipping '#{line}' because we've used it before (#{ @history[ source ][ key ] })"
+            next
+          end
         end
 
         # if we're here, we're good to go
@@ -189,7 +191,7 @@ module TC
         break
       end
 
-      if ( n == 0 ) then
+      if n == 0
         raise "Failed to pick an entry from '#{source}' - exhausted content?"
       end
 
@@ -221,8 +223,8 @@ module TC
 
       tweet = sprintf "%s %s", sanitise( line ), link
 
-      @log.warn sprintf "%sTweeting '%s' [%d]", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length
-      @twitter.update( tweet ) if not @dry_run
+      @log.warn sprintf "%sTweeting '%s' [%d] from %s/%s", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length, repo, path
+      @twitter.update( tweet ) unless @dry_run
     end
 
     def update_history( source, line )
@@ -258,7 +260,9 @@ module TC
           tweet( repo, hash, path, line, line_number )
 
           # store in history
-          update_history( source, line )
+          if @config.history_file
+            update_history( source, line )
+          end
 
           # all done!
         rescue => e
