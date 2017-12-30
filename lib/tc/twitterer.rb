@@ -33,8 +33,8 @@ module TC
       @log.info 'Starting up'
 
       begin
-        raise 'config file not specified' unless config_path
-        raise 'config file not found'     unless File.file?( config_path )
+        fail 'config file not specified' unless config_path
+        fail 'config file not found'     unless File.file?( config_path )
 
         @log.info "Loading config from #{ config_path }"
         @config = OpenStruct.new( TOML.load_file( config_path ) )
@@ -78,7 +78,7 @@ module TC
 
         begin
           unless File.file?( @config.history_file )
-            @log.info "History not present - creating"
+            @log.info 'History not present - creating'
             File.write( @config.history_file, nil )
           end
 
@@ -173,7 +173,7 @@ module TC
         line        = rows[ line_number ]
 
         # must contain an alpha - don't bother logging as this is specified behavior
-        next unless line.match( /[a-zA-Z]/ )
+        next unless line =~ /[a-zA-Z]/
 
         # mustn't've been used before
         if @config.history_file
@@ -192,12 +192,12 @@ module TC
       end
 
       if n == 0
-        raise "Failed to pick an entry from '#{source}' - exhausted content?"
+        fail "Failed to pick an entry from '#{source}' - exhausted content?"
       end
 
       @log.debug "Picked '#{pick}' [#{n}] from '#{source}'"
 
-      return pick, n 
+      return pick, n
     end
 
     def sanitise( line )
@@ -213,7 +213,7 @@ module TC
       line = ( line.length > MAX_STRING_LENGTH ? "#{ line[ 0 .. MAX_STRING_LENGTH ] }..." : line )
 
       # just in case we truncated after a space
-      line.gsub!( /\s\.\.\./, '...' ) 
+      line.gsub!( /\s\.\.\./, '...' )
 
       line
     end
@@ -221,7 +221,7 @@ module TC
     def tweet( repo, hash, path, line, line_number )
       link = "https://github.com/#{repo}/blame/#{hash}/#{path}#L#{line_number}"
 
-      tweet = sprintf "%s %s", sanitise( line ), link
+      tweet = sprintf '%s %s', sanitise( line ), link
 
       @log.warn sprintf "%sTweeting '%s' [%d] from %s/%s", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length, repo, path
       @twitter.update( tweet ) unless @dry_run
@@ -244,7 +244,7 @@ module TC
         @log.info "Processing '#{source}'"
 
         begin
-          repo, path = source.match(/(.*?\/.*?)\/(.*)/).captures
+          repo, path = source.match( %r{(.*?/.*?)/(.*)} ).captures
           # TODO fail here if we can't extract successfully
 
           # convert master->hash
