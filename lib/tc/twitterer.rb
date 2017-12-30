@@ -144,7 +144,7 @@ module TC
       @log.info "Fetching '#{repo}/#{path}' at '#{hash}'"
 
       begin
-        response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{repo}/#{hash}/#{path}") )
+        response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{repo}/#{hash}/#{path}" ) )
 
         # this will fail unless we get a 200 OK
         response.value
@@ -244,8 +244,12 @@ module TC
         @log.info "Processing '#{source}'"
 
         begin
-          repo, path = source.match( %r{(.*?/.*?)/(.*)} ).captures
-          # TODO fail here if we can't extract successfully
+          if m = source.match( %r{(.*?/.*?)/(.*)} )
+            repo, path = m.captures
+          else
+            fail "Couldn't extract repo and path from '#{source}' - skipping"
+            next
+          end
 
           # convert master->hash
           hash = resolve_repo( repo )
