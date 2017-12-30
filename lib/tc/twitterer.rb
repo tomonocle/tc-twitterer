@@ -117,11 +117,11 @@ module TC
       @log.level = @@LOG_LEVEL_MAP[ level ]
     end
 
-    def resolve_repo( username, repo )
-      @log.info "Resolving master->hash for '#{username}/#{repo}'"
+    def resolve_repo( repo )
+      @log.info "Resolving master->hash for '#{repo}'"
 
       begin
-        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{username}/#{repo}/git/refs/heads/master" ) )
+        response = Net::HTTP.get_response( URI( "https://api.github.com/repos/#{repo}/git/refs/heads/master" ) )
 
         # this will fail unless we get a 200 OK
         response.value
@@ -129,42 +129,42 @@ module TC
         json = JSON.parse( response.body )
 
       rescue => e
-        @log.error "Failed to resolve '#{username}/#{repo}' master: #{e}"
+        @log.error "Failed to resolve '#{repo}' master: #{e}"
         raise e
       end
 
       hash = json['object']['sha']
 
-      @log.debug "Resolved master->#{hash} for '#{username}/#{repo}'"
+      @log.debug "Resolved master->#{hash} for '#{repo}'"
 
       hash
     end
 
-    def fetch_file( username, repo, hash, path )
-      @log.info "Fetching '#{username}/#{repo}/#{path}' at '#{hash}'"
+    def fetch_file( repo, hash, path )
+      @log.info "Fetching '#{repo}/#{path}' at '#{hash}'"
 
       begin
-        response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{username}/#{repo}/#{hash}/#{path}") )
+        response = Net::HTTP.get_response( URI( "https://raw.githubusercontent.com/#{repo}/#{hash}/#{path}") )
 
         # this will fail unless we get a 200 OK
         response.value
 
       rescue => e
-        @log.error "Failed to fetch '#{username}/#{repo}/#{path}' at '#{hash}': #{e}"
+        @log.error "Failed to fetch '#{repo}/#{path}' at '#{hash}': #{e}"
         raise e
       end
 
-      @log.debug "Fetched '#{username}/#{repo}/#{path}' at '#{hash}'"
+      @log.debug "Fetched '#{repo}/#{path}' at '#{hash}'"
 
       response.body
     end
 
-    def pick_line( username, repo, path, contents )
+    def pick_line( repo, path, contents )
       n    = 0
       pick = ''
       rows = contents.split( "\n" )
 
-      source = "#{username}/#{repo}/#{path}"
+      source = "#{repo}/#{path}"
 
       @log.info "Picking suitable line from '#{source}'"
 
@@ -208,7 +208,7 @@ module TC
       line.gsub!( /\s+/, ' ' )
 
       # truncate to a sane length, add an elipsis if necessary
-      line = ( line.length > MAX_STRING_LENGTH ? "#{line[0..MAX_STRING_LENGTH]}..." : line )
+      line = ( line.length > MAX_STRING_LENGTH ? "#{ line[ 0 .. MAX_STRING_LENGTH ] }..." : line )
 
       # just in case we truncated after a space
       line.gsub!( /\s\.\.\./, '...' ) 
@@ -216,8 +216,8 @@ module TC
       line
     end
 
-    def tweet( username, repo, hash, path, line, line_number )
-      link = "https://github.com/#{username}/#{repo}/blame/#{hash}/#{path}#L#{line_number}"
+    def tweet( repo, hash, path, line, line_number )
+      link = "https://github.com/#{repo}/blame/#{hash}/#{path}#L#{line_number}"
 
       tweet = sprintf "%s %s", sanitise( line ), link
 
@@ -242,20 +242,20 @@ module TC
         @log.info "Processing '#{source}'"
 
         begin
-          username, repo, path = source.match(/(.*?)\/(.*?)\/(.*)/).captures
+          repo, path = source.match(/(.*?\/.*?)\/(.*)/).captures
           # TODO fail here if we can't extract successfully
 
           # convert master->hash
-          hash = resolve_repo( username, repo )
+          hash = resolve_repo( repo )
 
           # fetch file
-          file_body = fetch_file( username, repo, hash, path )
+          file_body = fetch_file( repo, hash, path )
 
           # extract suitable line
-          line, line_number = pick_line( username, repo, path, file_body )
+          line, line_number = pick_line( repo, path, file_body )
 
           # generate the tweet and send it
-          tweet( username, repo, hash, path, line, line_number )
+          tweet( repo, hash, path, line, line_number )
 
           # store in history
           update_history( source, line )
