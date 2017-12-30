@@ -8,7 +8,7 @@ files into the ether, so wrote `twitterer` to do just that.
 Essentially you feed it paths to publicly accessible files on GitHub and it'll
 tweet a random line from them (one tweet per file) with a link to the line on
 GitHub. Optionally it can keep track of previous tweets to avoid sounding 
-reptitive.
+repetitive.
 
 Note: source files must be in the default branch, but `twitterer` will resolve
 that branch to a commit before tweeting the link.
