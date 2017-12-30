@@ -10,11 +10,11 @@ module TC
     require 'logger'
     require 'ostruct'
     require 'csv'
-    require 'digest'
 
-    MAX_TWEET_LENGTH  = 140
-    MAX_URL_LENGTH    = 23
-    MAX_STRING_LENGTH = MAX_TWEET_LENGTH - MAX_URL_LENGTH
+    MAX_TWEET_LENGTH   = 140
+    MAX_URL_LENGTH     = 23
+    MAX_STRING_LENGTH  = MAX_TWEET_LENGTH - MAX_URL_LENGTH
+    MAX_HISTORY_LENGTH = MAX_STRING_LENGTH
 
     @@LOG_LEVEL_MAP = {
       'debug' => Logger::DEBUG,
@@ -85,13 +85,11 @@ module TC
           log = CSV.foreach( @config.history_file ) do |csv|
             timestamp,source,line = csv
 
-            md5 = Digest::MD5.hexdigest line
-
             @log.debug( "Processing history: #{source}/#{line}/#{timestamp}")
 
             # apparently ruby doesn't autovivify? Vive la perl!
             @history[source]    ||= {}
-            @history[source][md5] = timestamp
+            @history[source][line] = timestamp
           end
 
         rescue => e
@@ -178,10 +176,9 @@ module TC
         next if not line.match( /[a-zA-Z]/ )
 
         # mustn't've been used before
-        md5 = Digest::MD5.hexdigest line
-
-        if @history.key?( source ) and @history[ source ].key?( md5 ) then
-          @log.debug "Skipping '#{line}' because we've used it before (#{ @history[ source ][ md5 ] })"
+        key = line[ 0 .. MAX_HISTORY_LENGTH ]
+        if @history.key?( source ) and @history[ source ].key?( key ) then
+          @log.debug "Skipping '#{line}' because we've used it before (#{ @history[ source ][ key ] })"
           next
         end
 
@@ -224,11 +221,14 @@ module TC
 
       tweet = sprintf "%s %s", sanitise( line ), link
 
-      @log.info sprintf "%sTweeting '%s' [%d]", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length
+      @log.warn sprintf "%sTweeting '%s' [%d]", ( @dry_run == true ? '[DRYRUN] ' : '' ), tweet, tweet.length
       @twitter.update( tweet ) if not @dry_run
     end
 
     def update_history( source, line )
+      # limit the length to avoid bloat in the history file
+      line = line[ 0 .. MAX_HISTORY_LENGTH ]
+
       @log.info sprintf "%sAdding '%s' to history for '%s'", ( @dry_run == true ? '[DRYRUN] ' : '' ), line, source
       return if @dry_run
 
